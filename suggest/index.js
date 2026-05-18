@@ -1,5 +1,6 @@
 import express from "express";
 import https from "https";
+import { createGoogleSuggestHeaders } from "../shared/youtube-request-config.js";
 
 const app = express();
 const PORT = 3000;
@@ -19,9 +20,7 @@ app.get("/", (req, res) => {
       keyword
     )}`,
     method: "GET",
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-    },
+    headers: createGoogleSuggestHeaders(),
   };
 
   const request = https.request(options, (response) => {

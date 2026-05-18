@@ -1,27 +1,23 @@
 import express from "express";
 import zlib from "zlib";
 import https from "https";
+import {
+  REQUEST_CLIENTS,
+  createCommentContext,
+  createCommentHeaders,
+} from "../shared/youtube-request-config.js";
 
 const app = express();
 const PORT = 3000;
 
 // YouTube Constants
-const CLIENT_VERSION = "2.20260515.01.00";
-const VISITOR_ID = "CgttdjdpbEp3WWxZVSjn-qXQBjIKCgJKUBIEGgAgI2LfAgrcAjE4LllUPXR6V0pVZG05X2pIVW53ck9sZ3JEVzcwWDY3QV9Odm5XcENjcFA2aEZiMDNOZmJKSGRNbGdPNE5vTjNCanY2Tk5MYktMOThFbk9teF8xUDc2bFc2NUJzeEk4NXc3ODI0a3BGQ2VWa3BROUhucW5kc1g4Y2JNU2xfUk9CTlM0YU5sQkgzUS1WaDcxcjdLVFdmZy1sSGZ6bi03TG5wSk94cjVYWXUzVFY5T3RfdFFVSWxTTWloaTRmNG5tVXkxU05STFJtLVVYU3c5bXVuX2E0OUQ2YWRNYTB1RGdhRzdfcy0tdUlEcTF2YmNQZDAtNUtPT0lrRWJJc2hHLVYtenZlQ3pEekU1TlpVRm5rem9POEZLOWh1Y3pZNHVXWnU0aDkzRnpfUDZQTnhBeXo2ZzB3bEZWV0lOalNaTzNwZGh6QWg0X0g0cG41MDFHQW1ZU2hXUmtlVXFfQQ==";
+const CLIENT_VERSION = REQUEST_CLIENTS.comment.clientVersion;
+const VISITOR_ID = REQUEST_CLIENTS.comment.visitorData;
 
 // --- Helpers ---
 
 function createContext() {
-  return {
-    client: {
-      hl: "ja",
-      gl: "JP",
-      clientName: "WEB",
-      clientVersion: CLIENT_VERSION,
-      platform: "DESKTOP",
-      visitorData: VISITOR_ID,
-    },
-  };
+  return createCommentContext();
 }
 
 function deepWalk(obj, callback) {
@@ -73,26 +69,7 @@ function makeRequest(videoId, body) {
         hostname: "www.youtube.com",
         path: "/youtubei/v1/next?prettyPrint=false",
         method: "POST",
-        headers: {
-          accept: "*/*",
-          origin: "https://www.youtube.com",
-          referer: `https://www.youtube.com/watch?v=${videoId}`,
-          "user-agent": "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-          "accept-language": "ja,en;q=0.9",
-          "accept-encoding": "gzip, deflate, br",
-          "content-encoding": "gzip",
-          "content-type": "application/json",
-          "content-length": gzippedBody.length,
-          "x-youtube-client-name": "1",
-          "x-youtube-client-version": CLIENT_VERSION,
-          "x-goog-visitor-id": VISITOR_ID,
-          "x-youtube-bootstrap-logged-in": "false",
-          "sec-ch-ua": '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
-          "sec-ch-ua-mobile": "?0",
-          "sec-ch-ua-platform": '"Chrome OS"',
-          pragma: "no-cache",
-          "cache-control": "no-cache",
-        },
+        headers: createCommentHeaders(videoId, gzippedBody.length),
       },
       (res) => {
         const chunks = [];

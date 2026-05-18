@@ -2,6 +2,10 @@ import express from "express";
 import fetch from "node-fetch";
 import https from "https"; 
 import cors from "cors";
+import {
+  REQUEST_CLIENTS,
+  createPlaylistHeaders,
+} from "../shared/youtube-request-config.js";
 
 const app = express();
 const port = 3011;
@@ -11,8 +15,7 @@ app.use(cors());
 const YT_API = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
 
 // Client Version (debug_rd.jsonから取得した最新版)
-const CLIENT_VERSION = "2.20260206.01.00";
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+const CLIENT_VERSION = REQUEST_CLIENTS.playlist.clientVersion;
 
 // メモリリーク対策: 通信エージェント
 const httpsAgent = new https.Agent({
@@ -23,27 +26,7 @@ const httpsAgent = new https.Agent({
 });
 
 // ヘッダー設定
-const headers = {
-  "Content-Type": "application/json",
-  "User-Agent": USER_AGENT,
-  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-  "Accept-Language": "ja,en;q=0.9",
-  "Accept-Encoding": "gzip, deflate, br",
-  "Cache-Control": "no-cache",
-  Pragma: "no-cache",
-  "sec-ch-ua": '"Chromium";v="121", "Google Chrome";v="121", "Not A(Brand";v="99"',
-  "sec-ch-ua-mobile": "?0",
-  "sec-ch-ua-platform": '"Windows"',
-  "Upgrade-Insecure-Requests": "1",
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Site": "same-origin",
-  "Sec-Fetch-User": "?1",
-  "x-youtube-client-name": "1",
-  "x-youtube-client-version": CLIENT_VERSION,
-  Origin: "https://www.youtube.com",
-  Referer: "https://www.youtube.com/",
-};
+const headers = createPlaylistHeaders();
 
 // ==================================================
 // ヘルパー関数

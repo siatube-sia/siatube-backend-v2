@@ -1,4 +1,8 @@
 import express from "express";
+import {
+  REQUEST_CLIENTS,
+  createSearchHeaders,
+} from "../shared/youtube-request-config.js";
 
 const app = express();
 
@@ -304,7 +308,7 @@ app.get("/search", async (req, res) => {
           hl: "ja",
           gl: "JP",
           clientName: "WEB",
-          clientVersion: "2.20260428.07.00",
+          clientVersion: REQUEST_CLIENTS.search.clientVersion,
           platform: "DESKTOP",
           utcOffsetMinutes: 540,
         },
@@ -324,15 +328,7 @@ app.get("/search", async (req, res) => {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-youtube-client-name": "1",
-        "x-youtube-client-version": "2.20260428.07.00",
-        "user-agent":
-          "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-        origin: "https://www.youtube.com",
-        referer: referer,
-      },
+      headers: createSearchHeaders(referer),
       body: JSON.stringify(body),
     });
 

@@ -1,6 +1,10 @@
 import express from "express";
 import cors from "cors";
 import { Agent as UndiciAgent } from "undici";
+import {
+  createVideoClientContext,
+  createVideoRequestHeaders,
+} from "../shared/youtube-request-config.js";
 
 /**
  * Expressアプリケーションの初期化
@@ -26,43 +30,10 @@ const YOUTUBE_API_URL = "https://www.youtube.com/youtubei/v1/next";
 const INNERTUBE_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
 
 /**
- * YouTubeへのリクエストで使用する最新のヘッダー設定
+ * YouTubeへのリクエストで使用するヘッダー設定
  * ※ Node.jsのfetchでエラーになる疑似ヘッダ(:authority等)は除外しています
  */
-const REQUEST_HEADERS = {
-  "accept": "*/*",
-  "accept-encoding": "gzip, deflate, br, zstd",
-  "accept-language": "ja,en;q=0.9",
-  "cache-control": "no-cache",
-  "cookie": "YSC=cFmONeO-T2E; VISITOR_INFO1_LIVE=79vF6F_Bloo; VISITOR_PRIVACY_METADATA=CgJKUBIEGgAgWA%3D%3D; _gcl_au=1.1.726696622.1769344213; LOGIN_INFO=AFmmF2swRAIgJ_Xc6ChPqF8Pp820nSBJ4uUY3te4CPhrVdf94BZnbOACID2ihpqWuvsXha7h95mlT-YAqDMFju3NElSBEeCYYOf0:QUQ3MjNmeUgwbmZzb1l3bVkydEZvdXI4YmtDTzJJQ2R3MmR1czlEM3FtRG5hRFgxbzVIZkMwTzVmS0tvQkJwVWQ3ZU0ybUt4UW1oaVVfanRLRE9LQUgxeTJmZ1VPWkllNDIxclkzSkp6Q0xxM1h4d0xFV3cwRHlvcG4tSVZ5MmxYWk9YdGRKbE0zNkpuY2NJcWtPamFDYkYybWZEVDVpWENR; PREF=tz=Asia.Tokyo&f5=20000&f7=100; SID=g.a0007wgMH5YFxZNEQe049yD6pEFKKLel-E_2ZNxhfW2dE6YruO7-bwcEPtH3JNsmB7r1Y6-QRAACgYKARgSARQSFQHGX2MidCRxCCtTx2Imwx4j6RP1MhoVAUF8yKqI9mnpqj7e81Rr3g3qaGeU0076; __Secure-1PSID=g.a0007wgMH5YFxZNEQe049yD6pEFKKLel-E_2ZNxhfW2dE6YruO7-ZW0jqw9F6qTIzil9lW2xcQACgYKATUSARQSFQHGX2MiyVPiW_lzjxYGb_rZ8VXyxhoVAUF8yKqbiVcvWUCan0s-eNIVR2Lx0076; __Secure-3PSID=g.a0007wgMH5YFxZNEQe049yD6pEFKKLel-E_2ZNxhfW2dE6YruO7-2efRXwPiv4xai568FECqugACgYKAXsSARQSFQHGX2MiQ1vCeLjATbQq56sTAQraHRoVAUF8yKodd6cm5oQBNH6dxLWmKMsc0076; HSID=A4xbdR5t3wqRgbGAQ; SSID=Ak_NyHoQaPxuzRjCA; APISID=Mie2tJy2lp00rn-c/ArILhE9kMjGWQnC8E; SAPISID=u2DTg_71cgkt9FPc/AyB82aOFIdPErNuxr; __Secure-1PAPISID=u2DTg_71cgkt9FPc/AyB82aOFIdPErNuxr; __Secure-3PAPISID=u2DTg_71cgkt9FPc/AyB82aOFIdPErNuxr; __Secure-YNID=16.YT=0yP9vAgBN-ox_O_exdeIslVBp6qrCkoogTxeMd_ZA3gdebP_IKZp5yMTIWw1w98wWO88WwDQccLl2xJpsCRd5Q7qn8W2vlQ148PUbuJsGTWr0_N7dSEwADdfyaWXVjwBCURPkwrTItOtFPw8x2kgmVsmjSpj8Q22mFnRT8SVeaGHXTTZYrP8-DoyeYEVK3hAaKZMlANryYFkFPPuFgeKCMBFCumE1_k-rRMElor4r375P7G2JaDCes0U4QGp4cuM9-w4loH124Z7THx1Fz_1EB_iYOJfiXzePfFq_do1RprSHQm5zF6lh1cz4tKhPdo0Zo8U0KmjxDxNx90mSHk-og; __Secure-ROLLOUT_TOKEN=CIf2wuDz4-T6kwEQj5bhz9imkgMYsOWytoWxkwM%3D; __Secure-1PSIDTS=sidts-CjEBBj1CYsjA0ZtjO6PiejQ3DIA50cwW8TE2xPNKG8EWPl6LVMNz3AgZlM3Q5uAUyPe9EAA; __Secure-3PSIDTS=sidts-CjEBBj1CYsjA0ZtjO6PiejQ3DIA50cwW8TE2xPNKG8EWPl6LVMNz3AgZlM3Q5uAUyPe9EAA; ST-tladcw=session_logininfo=AFmmF2swRAIgJ_Xc6ChPqF8Pp820nSBJ4uUY3te4CPhrVdf94BZnbOACID2ihpqWuvsXha7h95mlT-YAqDMFju3NElSBEeCYYOf0%3AQUQ3MjNmeUgwbmZzb1l3bVkydEZvdXI4YmtDTzJJQ2R3MmR1czlEM3FtRG5hRFgxbzVIZkMwTzVmS0tvQkJwVWQ3ZU0ybUt4UW1oaVVfanRLRE9LQUgxeTJmZ1VPWkllNDIxclkzSkp6Q0xxM1h4d0xFV3cwRHlvcG4tSVZ5MmxYWk9YdGRKbE0zNkpuY2NJcWtPamFDYkYybWZEVDVpWENR; SIDCC=AKEyXzW_1CshoHehn7R-El47Qr6jD9D2kq9FzLtY0G85-XYrDzKR9LCT_QleNjarBQrcO3QMUvQ; __Secure-1PSIDCC=AKEyXzWRSdEitvGP0PdBz__ln1eSF8yLbp31xhPqodHM2WhaQlwVo_mXTdx8QQ1_xcsrf32vhv4; __Secure-3PSIDCC=AKEyXzWQbD4hyYA-0vbO6XHzrB2JvY9cuL-04hn4PEOC4yjNH89QfIH0bYmZC9u-b4EKt53WHA",
-  "device-memory": "8",
-  "origin": "https://www.youtube.com",
-  "pragma": "no-cache",
-  "priority": "u=1, i",
-  "referer": "https://www.youtube.com/",
-  "sec-ch-dpr": "1",
-  "sec-ch-ua": '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
-  "sec-ch-ua-arch": '"x86"',
-  "sec-ch-ua-bitness": '"64"',
-  "sec-ch-ua-form-factors": '"Desktop"',
-  "sec-ch-ua-full-version": '"144.0.7559.221"',
-  "sec-ch-ua-full-version-list": '"Not(A:Brand";v="8.0.0.0", "Chromium";v="144.0.7559.221", "Google Chrome";v="144.0.7559.221"',
-  "sec-ch-ua-mobile": "?0",
-  "sec-ch-ua-model": '""',
-  "sec-ch-ua-platform": '"Chrome OS"',
-  "sec-ch-ua-platform-version": '"16503.76.0"',
-  "sec-ch-ua-wow64": "?0",
-  "sec-ch-viewport-width": "915",
-  "sec-fetch-dest": "empty",
-  "sec-fetch-mode": "cors",
-  "sec-fetch-site": "same-origin",
-  "user-agent": "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
-  "x-browser-channel": "stable",
-  "x-browser-copyright": "Copyright 2026 Google LLC. All Rights reserved.",
-  "x-browser-validation": "ZiXHB9YFjQ/cenQyml/9zpPvvIU=",
-  "x-browser-year": "2026",
-  "x-client-data": "CIm2yQEIo7bJAQipncoBCIztygEIlaHLAQiIoM0BCNajzwEI1a3PAQi7rs8BCMevzwEIya/PAQj6r88BCLSwzwEInrHPAQifs88BCIW0zwEY7IXPAQ=="
-};
+const REQUEST_HEADERS = createVideoRequestHeaders();
 
 // Keep-Alive 用の undici.Agent
 const undiciAgent = new UndiciAgent({
@@ -106,15 +77,7 @@ const fetchImageAsBase64 = async (url) => {
 /**
  * APIリクエスト時に送信するクライアントコンテキスト
  */
-const CLIENT_CONTEXT = {
-  client: {
-    hl: "ja",
-    gl: "JP",
-    clientName: "WEB",
-    clientVersion: "2.20240214.01.00",
-    ua: REQUEST_HEADERS["user-agent"],
-  },
-};
+const CLIENT_CONTEXT = createVideoClientContext();
 
 // ==========================================
 // ユーティリティ関数
