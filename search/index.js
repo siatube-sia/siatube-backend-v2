@@ -12,14 +12,17 @@ function extractYouTubeData(json) {
   const items = [];
   let continuationToken = null;
 
+  // 1ページ目、または2ページ目の構造からヒット件数を取得（2ページ目以降は含まれないことが多い）
   const estimatedResults =
     json?.estimatedResults || json?.estimatedResults?.simpleText || null;
 
+  // 1ページ目と2ページ目（onResponseReceivedCommands）の両方の targetId に対応
   const targetId =
     json?.targetId ||
     json?.responseContext?.serviceTrackingParams?.[0]?.params?.find(
       (p) => p.key === "targetId"
     )?.value ||
+    json?.onResponseReceivedCommands?.[0]?.appendContinuationItemsAction?.targetId || // 2ページ目用パス
     null;
 
   const parseViewCount = (fullText, shortText) => {
@@ -49,6 +52,8 @@ function extractYouTubeData(json) {
   function traverse(obj) {
     if (!obj || typeof obj !== "object") return;
 
+    // 次のページ（3ページ目、4ページ目...）のためのトークン取得
+    // 2ページ目の continuationItems の末尾にあるトークンもこれで自動キャッチします
     if (obj.continuationItemRenderer) {
       const token =
         obj.continuationItemRenderer?.continuationEndpoint?.continuationCommand
@@ -101,6 +106,7 @@ function extractYouTubeData(json) {
       return;
     }
 
+    // 1ページ目でも、2ページ目の appendContinuationItemsAction の奥にあっても自動でここにヒットします
     if (obj.videoRenderer) {
       const v = obj.videoRenderer;
       const ownerRun =
@@ -251,6 +257,7 @@ function extractYouTubeData(json) {
       return;
     }
 
+    // 再帰的にオブジェクトの全キー、配列の全要素を掘り下げる
     if (Array.isArray(obj)) {
       for (const v of obj) traverse(v);
     } else {
@@ -280,11 +287,12 @@ function extractYouTubeData(json) {
 app.get("/search", async (req, res) => {
   try {
     const q = req.query.q;
+    const token = req.query.token; 
 
-    if (!q) {
+    if (!q && !token) {
       return res.status(400).json({
         error: "Bad Request",
-        message: "query parameter 'q' is required",
+        message: "query parameter 'q' or 'token' is required",
       });
     }
 
@@ -303,8 +311,16 @@ app.get("/search", async (req, res) => {
         user: { lockedSafetyMode: false },
         request: { useSsl: true },
       },
-      query: q,
     };
+
+    if (token) {
+      body.continuation = token; // 2ページ目以降は単にトークンを渡すだけでOK
+    } else {
+      body.query = q;
+    }
+
+    const refererQuery = q ? encodeURIComponent(String(q)) : "";
+    const referer = `https://www.youtube.com/results?search_query=${refererQuery}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -315,12 +331,11 @@ app.get("/search", async (req, res) => {
         "user-agent":
           "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
         origin: "https://www.youtube.com",
-        referer: `https://www.youtube.com/results?search_query=${encodeURIComponent(String(q))}`,
+        referer: referer,
       },
       body: JSON.stringify(body),
     });
 
-    // ② アップストリーム（YouTube側）のエラーハンドリング
     if (!response.ok) {
       console.error(`YouTube API responded with status: ${response.status}`);
       return res.status(502).json({
@@ -331,7 +346,7 @@ app.get("/search", async (req, res) => {
 
     const json = await response.json();
 
-    // 2. JSON Parse + Extract
+    // 2. JSON Parse + Extract (1ページ目も2ページ目以降も共通でパースする)
     const parsedData = extractYouTubeData(json);
 
     // ③ サムネイル処理の最適化（Base64変換の廃止、URL整形のみ）
@@ -345,7 +360,6 @@ app.get("/search", async (req, res) => {
             if (imgUrl.startsWith("//")) {
               imgUrl = "https:" + imgUrl;
             }
-            // URLのみを上書きしてクライアントに返す
             item.thumbnails = [{ ...lastThumbnail, url: imgUrl }];
           }
         }
