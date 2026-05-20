@@ -1,29 +1,30 @@
-import express from "express";
 import { Innertube } from "youtubei.js";
+import { getChannelClientOptions } from "../shared/youtube-request-config.js";
 
-const app = express();
+const clientCache = new Map();
 
-let youtube;
-let youtubeReadyPromise;
+function getYoutubeClient(options = {}) {
+  const clientOptions = getChannelClientOptions(options);
+  const cacheKey = `${clientOptions.lang}:${clientOptions.location}`;
 
-function getYoutubeClient() {
-  if (youtube) return Promise.resolve(youtube);
-  if (!youtubeReadyPromise) {
-    youtubeReadyPromise = Innertube.create({
-      lang: "ja",
-      location: "JP",
-      retrieve_player: false,
-    })
-      .then((client) => {
-        youtube = client;
-        return youtube;
-      })
-      .catch((err) => {
-        youtubeReadyPromise = null;
-        throw err;
-      });
+  if (clientCache.has(cacheKey)) {
+    return clientCache.get(cacheKey);
   }
 
+  const youtubeReadyPromise = Innertube.create({
+    ...clientOptions,
+    retrieve_player: false,
+  })
+      .then((client) => {
+        clientCache.set(cacheKey, Promise.resolve(client));
+        return client;
+      })
+      .catch((err) => {
+        clientCache.delete(cacheKey);
+        throw err;
+      });
+
+  clientCache.set(cacheKey, youtubeReadyPromise);
   return youtubeReadyPromise;
 }
 
@@ -47,20 +48,19 @@ async function fetchImageAsBase64(videoId, quality = "mqdefault") {
     const buffer = Buffer.from(arrayBuffer);
 
     return `data:image/webp;base64,${buffer.toString("base64")}`;
-  } catch (err) {
-    console.error(`画像取得エラー [${videoId} (${quality})]:`, err.message);
+  } catch {
     return "";
   }
 }
 
-export async function getChannel(channelId) {
+export async function getChannel(channelId, options = {}) {
   if (!channelId) {
     const error = new Error("channelId is required");
     error.statusCode = 400;
     throw error;
   }
 
-  const client = await getYoutubeClient();
+  const client = await getYoutubeClient(options);
   const channel = await client.getChannel(channelId);
 
   const metadata = channel.metadata ?? {};
@@ -177,22 +177,3 @@ export async function getChannel(channelId) {
     uploadsPlaylistId,
   };
 }
-
-app.get("/api/channel/:id", async (req, res) => {
-  try {
-    res.json(await getChannel(req.params.id));
-  } catch (err) {
-    console.error(
-      `チャンネル[${req.params.id}]情報取得エラー:`,
-      err?.message || err
-    );
-
-    res.status(err.statusCode || 500).json({
-      error: err.statusCode === 400
-        ? err.message
-        : "チャンネル情報の取得中にエラーが発生しました",
-    });
-  }
-});
-
-export default app;

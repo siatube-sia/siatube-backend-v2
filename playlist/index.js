@@ -1,11 +1,9 @@
-import express from "express";
-import fetch from "node-fetch";
-import https from "https"; 
-import cors from "cors";
-import { createPlaylistHeaders } from "../shared/youtube-request-config.js";
-
-const app = express();
-app.use(cors());
+import https from "https";
+import {
+  createPlaylistHeaders,
+  getLocaleOptions,
+  getPlaylistClientVersion,
+} from "../shared/youtube-request-config.js";
 
 // エンドポイント
 const YT_API = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
@@ -17,9 +15,6 @@ const httpsAgent = new https.Agent({
   maxSockets: 50,
   timeout: 30000,
 });
-
-// ヘッダー設定
-const headers = createPlaylistHeaders();
 
 // ==================================================
 // ヘルパー関数
@@ -75,8 +70,7 @@ async function convertImageToBase64(url) {
     const buf = await res.arrayBuffer();
     const ext = url.endsWith(".jpg") ? "jpg" : "webp";
     return `data:image/${ext};base64,${Buffer.from(buf).toString("base64")}`;
-  } catch (err) {
-    console.error("[convertImageToBase64] Error:", err);
+  } catch {
     return null;
   }
 }
@@ -101,9 +95,12 @@ async function fetchThumbnailWithFallback(vid) {
 // ==================================================
 
 // ytInitialData 抽出（RD用） - 改良版
-async function extractInitialData(url) {
+async function extractInitialData(url, requestOptions = {}) {
   try {
-    const html = await fetch(url, { headers, agent: httpsAgent }).then((r) => r.text());
+    const html = await fetch(url, {
+      headers: createPlaylistHeaders(requestOptions),
+      agent: httpsAgent,
+    }).then((r) => r.text());
     
     // 1. 変数定義を探す
     const marker = "var ytInitialData =";
@@ -146,7 +143,6 @@ async function extractInitialData(url) {
     }
 
   } catch (err) {
-    console.error("[extractInitialData] Error:", err);
     throw err;
   }
 }
@@ -187,9 +183,9 @@ function getTokenFromVideoList(items) {
 // ==================================================
 
 // RD (ミックス) プレイリスト
-async function handleRDPlaylist(listId, videoId) {
+async function handleRDPlaylist(listId, videoId, requestOptions = {}) {
   const url = `https://www.youtube.com/watch?v=${videoId}&list=${listId}`;
-  const data = await extractInitialData(url);
+  const data = await extractInitialData(url, requestOptions);
 
   // RDリストは twoColumnWatchNextResults -> playlist -> playlist にある
   const playlistObj = data.contents?.twoColumnWatchNextResults?.playlist?.playlist;
@@ -246,14 +242,15 @@ async function handleRDPlaylist(listId, videoId) {
 }
 
 // 通常プレイリスト
-async function handleNormalPlaylist(listId, token) {
+async function handleNormalPlaylist(listId, token, requestOptions = {}) {
+  const locale = getLocaleOptions(requestOptions);
   const body = {
     context: {
       client: {
-        hl: "ja",
-        gl: "JP",
+        hl: locale.hl,
+        gl: locale.gl,
         clientName: "WEB",
-        clientVersion: CLIENT_VERSION, // ここを更新
+        clientVersion: getPlaylistClientVersion(requestOptions),
         originalUrl: `https://www.youtube.com/playlist?list=${listId}`,
       },
     },
@@ -264,7 +261,7 @@ async function handleNormalPlaylist(listId, token) {
 
   const response = await fetch(YT_API, {
     method: "POST",
-    headers,
+    headers: createPlaylistHeaders(requestOptions),
     body: JSON.stringify(body),
     agent: httpsAgent, 
   });
@@ -368,6 +365,7 @@ async function handleNormalPlaylist(listId, token) {
 export async function getPlaylist(rawParams, options = {}) {
   let token = options.token || null;
   let videoId = options.v || null;
+  const { token: _token, v: _videoId, ...requestOptions } = options;
 
   let decodedString = rawParams;
   try {
@@ -421,11 +419,11 @@ export async function getPlaylist(rawParams, options = {}) {
       error.statusCode = 400;
       throw error;
     }
-    return handleRDPlaylist(targetIds[0], videoId);
+    return handleRDPlaylist(targetIds[0], videoId, requestOptions);
   }
 
   const results = await Promise.all(
-    targetIds.map((listId) => handleNormalPlaylist(listId, token))
+    targetIds.map((listId) => handleNormalPlaylist(listId, token, requestOptions))
   );
 
   let allItems = results.flatMap((res) => res.items);
@@ -461,14 +459,3 @@ export async function getPlaylist(rawParams, options = {}) {
     nextToken: null,
   };
 }
-
-app.get("/api/playlist/:id", async (req, res) => {
-  try {
-    return res.json(await getPlaylist(req.params.id, req.query));
-  } catch (err) {
-    console.error("[/playlist] Error:", err);
-    res.status(err.statusCode || 500).json({ error: err.message });
-  }
-});
-
-export default app;

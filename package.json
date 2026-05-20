@@ -4,28 +4,43 @@
   "description": "Node.js library for fetching YouTube video, search, channel, comment, playlist, and suggestion data.",
   "type": "module",
   "main": "./index.js",
-  "sideEffects": false,
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
     "./video": "./video/index.js",
+    "./video/app": "./video/app.js",
     "./search": "./search/index.js",
+    "./search/app": "./search/app.js",
     "./channel": "./channel/index.js",
+    "./channel/app": "./channel/app.js",
     "./comment": "./comment/index.js",
+    "./comment/app": "./comment/app.js",
     "./playlist": "./playlist/index.js",
-    "./suggest": "./suggest/index.js"
+    "./playlist/app": "./playlist/app.js",
+    "./suggest": "./suggest/index.js",
+    "./suggest/app": "./suggest/app.js"
+  },
+  "bin": {
+    "siatube": "./bin/siatube.js"
   },
   "files": [
+    "bin/siatube.js",
     "client.js",
     "index.js",
     "USAGE.md",
     "scripts/check-request-config.mjs",
+    "channel/app.js",
     "channel/index.js",
+    "comment/app.js",
     "comment/index.js",
+    "playlist/app.js",
     "playlist/index.js",
+    "search/app.js",
     "search/index.js",
     "shared/youtube-request-config.js",
+    "suggest/app.js",
     "suggest/index.js",
+    "video/app.js",
     "video/index.js",
     "LICENSE",
     "README.md"
@@ -43,7 +58,16 @@
     "playlist",
     "comments"
   ],
+  "author": "siatube-sia",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/siatube-sia/siatube-backend-v2.git"
+  },
+  "homepage": "https://github.com/siatube-sia/siatube-backend-v2#readme",
+  "bugs": {
+    "url": "https://github.com/siatube-sia/siatube-backend-v2/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -53,7 +77,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "node-fetch": "^3.3.2",
     "youtubei.js": "^15.1.0"
   }
 }

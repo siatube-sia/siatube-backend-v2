@@ -1,4 +1,3 @@
-import express from "express";
 import zlib from "zlib";
 import https from "https";
 import {
@@ -6,13 +5,7 @@ import {
   createCommentHeaders,
 } from "../shared/youtube-request-config.js";
 
-const app = express();
-
 // --- Helpers ---
-
-function createContext() {
-  return createCommentContext();
-}
 
 function deepWalk(obj, callback) {
   if (!obj || typeof obj !== "object") return;
@@ -53,7 +46,7 @@ function normalizeCount(str) {
 
 // --- Request ---
 
-function makeRequest(videoId, body) {
+function makeRequest(videoId, body, requestOptions = {}) {
   return new Promise((resolve, reject) => {
     const json = JSON.stringify(body);
     const gzippedBody = zlib.gzipSync(json);
@@ -63,7 +56,7 @@ function makeRequest(videoId, body) {
         hostname: "www.youtube.com",
         path: "/youtubei/v1/next?prettyPrint=false",
         method: "POST",
-        headers: createCommentHeaders(videoId, gzippedBody.length),
+        headers: createCommentHeaders(videoId, gzippedBody.length, requestOptions),
       },
       (res) => {
         const chunks = [];
@@ -232,8 +225,12 @@ function extractCommentsFromFramework(data, replyMap = {}) {
 
 // --- Core API Functions ---
 
-async function fetchInitialComments(videoId, sort = "top") {
-  const initialData = await makeRequest(videoId, { context: createContext(), videoId });
+async function fetchInitialComments(videoId, sort = "top", requestOptions = {}) {
+  const initialData = await makeRequest(
+    videoId,
+    { context: createCommentContext(requestOptions), videoId },
+    requestOptions
+  );
   const tokens = extractCommentTokens(initialData);
   
   if (!tokens) throw new Error("Comment token not found");
@@ -241,11 +238,20 @@ async function fetchInitialComments(videoId, sort = "top") {
   const continuation = sort === "new" ? tokens.newToken : tokens.topToken;
   if (!continuation) throw new Error("Sort continuation missing");
 
-  return fetchContinuation(videoId, continuation, { mode: "initial", sort });
+  return fetchContinuation(videoId, continuation, { mode: "initial", sort }, requestOptions);
 }
 
-async function fetchContinuation(videoId, continuation, extra = {}) {
-  const response = await makeRequest(videoId, { context: createContext(), continuation });
+async function fetchContinuation(
+  videoId,
+  continuation,
+  extra = {},
+  requestOptions = {}
+) {
+  const response = await makeRequest(
+    videoId,
+    { context: createCommentContext(requestOptions), continuation },
+    requestOptions
+  );
   const continuations = extractContinuations(response);
   const comments = extractCommentsFromFramework(response, continuations.replies);
 
@@ -258,8 +264,12 @@ async function fetchContinuation(videoId, continuation, extra = {}) {
   };
 }
 
-async function fetchReplies(videoId, continuation) {
-  const response = await makeRequest(videoId, { context: createContext(), continuation });
+async function fetchReplies(videoId, continuation, requestOptions = {}) {
+  const response = await makeRequest(
+    videoId,
+    { context: createCommentContext(requestOptions), continuation },
+    requestOptions
+  );
   const continuations = extractContinuations(response);
   const comments = extractCommentsFromFramework(response, continuations.replies);
 
@@ -275,6 +285,7 @@ export async function getComments({
   videoId,
   sort = "top",
   continuation,
+  ...requestOptions
 } = {}) {
   if (!videoId) {
     const error = new Error("videoId is required");
@@ -283,8 +294,13 @@ export async function getComments({
   }
 
   const result = continuation
-    ? await fetchContinuation(videoId, continuation, { mode: "continuation" })
-    : await fetchInitialComments(videoId, sort);
+    ? await fetchContinuation(
+        videoId,
+        continuation,
+        { mode: "continuation" },
+        requestOptions
+      )
+    : await fetchInitialComments(videoId, sort, requestOptions);
 
   return {
     success: true,
@@ -302,6 +318,7 @@ export async function getComments({
 export async function getReplies({
   videoId,
   continuation,
+  ...requestOptions
 } = {}) {
   if (!videoId || !continuation) {
     const error = new Error("videoId and continuation are required");
@@ -309,7 +326,7 @@ export async function getReplies({
     throw error;
   }
 
-  const result = await fetchReplies(videoId, continuation);
+  const result = await fetchReplies(videoId, continuation, requestOptions);
 
   return {
     success: true,
@@ -325,6 +342,7 @@ export async function getReplies({
 export async function getRawCommentData({
   videoId,
   continuation,
+  ...requestOptions
 } = {}) {
   if (!videoId || !continuation) {
     const error = new Error("videoId and continuation are required");
@@ -332,41 +350,11 @@ export async function getRawCommentData({
     throw error;
   }
 
-  const result = await fetchContinuation(videoId, continuation);
+  const result = await fetchContinuation(
+    videoId,
+    continuation,
+    {},
+    requestOptions
+  );
   return result.raw;
 }
-
-// --- Endpoints ---
-
-app.get("/api/comments", async (req, res) => {
-  try {
-    res.json(await getComments(req.query));
-  } catch (err) {
-    console.error("[Comments API Error]", err.message);
-    res.status(err.statusCode || 500).json({ error: err.message || "Internal server error" });
-  }
-});
-
-app.get("/api/replies", async (req, res) => {
-  try {
-    res.json(await getReplies(req.query));
-  } catch (err) {
-    console.error("[Replies API Error]", err.message);
-    res.status(err.statusCode || 500).json({ error: err.message || "Internal server error" });
-  }
-});
-
-app.get("/api/raw", async (req, res) => {
-  try {
-    res.json(await getRawCommentData(req.query));
-  } catch (err) {
-    console.error("[Raw API Error]", err.message);
-    res.status(err.statusCode || 500).json({ error: err.message || "Internal server error" });
-  }
-});
-
-app.get("/", (_, res) => {
-  res.json({ ok: true, service: "youtube-comments-api" });
-});
-
-export default app;

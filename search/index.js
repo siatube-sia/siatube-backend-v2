@@ -1,11 +1,7 @@
-import express from "express";
 import {
-  REQUEST_CLIENTS,
   createSearchHeaders,
+  getSearchRequestContext,
 } from "../shared/youtube-request-config.js";
-
-const app = express();
-const NODE_ENV = process.env.NODE_ENV || "development";
 
 /**
  * YouTubeの検索結果JSONから動画、ショート、再生リスト、チャンネル情報を抽出する関数
@@ -271,9 +267,7 @@ function extractYouTubeData(json) {
 
   try {
     traverse(json);
-  } catch (e) {
-    console.error("extract error:", e);
-  }
+  } catch {}
 
   return {
     items,
@@ -286,10 +280,7 @@ function extractYouTubeData(json) {
 // ==========================================
 // API エンドポイント
 // ==========================================
-export async function searchVideos({
-  q,
-  token,
-} = {}) {
+export async function searchVideos({ q, token, ...requestOptions } = {}) {
   if (!q && !token) {
     const error = new Error("query parameter 'q' or 'token' is required");
     error.statusCode = 400;
@@ -298,18 +289,7 @@ export async function searchVideos({
 
   const url = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false";
   const body = {
-    context: {
-      client: {
-        hl: "ja",
-        gl: "JP",
-        clientName: "WEB",
-        clientVersion: REQUEST_CLIENTS.search.clientVersion,
-        platform: "DESKTOP",
-        utcOffsetMinutes: 540,
-      },
-      user: { lockedSafetyMode: false },
-      request: { useSsl: true },
-    },
+    context: getSearchRequestContext(requestOptions),
   };
 
   if (token) {
@@ -323,12 +303,11 @@ export async function searchVideos({
 
   const response = await fetch(url, {
     method: "POST",
-    headers: createSearchHeaders(referer),
+    headers: createSearchHeaders(referer, requestOptions),
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    console.error(`YouTube API responded with status: ${response.status}`);
     const error = new Error("Failed to fetch data from upstream service.");
     error.statusCode = 502;
     throw error;
@@ -355,31 +334,3 @@ export async function searchVideos({
 
   return parsedData;
 }
-
-app.get("/search", async (req, res) => {
-  try {
-    return res.status(200).json(await searchVideos(req.query));
-  } catch (error) {
-    console.error("Internal Server Error:", error);
-
-    const errorResponse = {
-      error: error.statusCode === 400
-        ? "Bad Request"
-        : error.statusCode === 502
-          ? "Bad Gateway"
-          : "Internal Server Error",
-    };
-    if (error.statusCode) {
-      res.status(error.statusCode);
-    } else {
-      res.status(500);
-    }
-    if (NODE_ENV === "development") {
-      errorResponse.message = error.message;
-    }
-
-    return res.json(errorResponse);
-  }
-});
-
-export default app;

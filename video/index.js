@@ -1,19 +1,11 @@
-import express from "express";
-import cors from "cors";
 import {
   createVideoClientContext,
   createVideoRequestHeaders,
 } from "../shared/youtube-request-config.js";
 
-const app = express();
-
-app.use(cors());
-
 const YOUTUBE_BASE_URL = "https://www.youtube.com/watch?v=";
 const YOUTUBE_API_URL = "https://www.youtube.com/youtubei/v1/next";
 const INNERTUBE_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
-const REQUEST_HEADERS = createVideoRequestHeaders();
-const CLIENT_CONTEXT = createVideoClientContext();
 const getTextFromRuns = (runs) => {
   return runs?.map((run) => run.text).join("") || null;
 };
@@ -170,7 +162,7 @@ const parseVideoLockup = (item) => {
   };
 };
 
-const fetchContinuationData = async (token) => {
+const fetchContinuationData = async (token, requestOptions = {}) => {
   if (!token) return null;
 
   const targetApiUrl = `${YOUTUBE_API_URL}?key=${INNERTUBE_API_KEY}`;
@@ -179,11 +171,11 @@ const fetchContinuationData = async (token) => {
     const apiResponse = await fetch(targetApiUrl, {
       method: "POST",
       headers: {
-        ...REQUEST_HEADERS,
+        ...createVideoRequestHeaders(requestOptions),
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        context: CLIENT_CONTEXT,
+        context: createVideoClientContext(requestOptions),
         continuation: token,
       }),
     });
@@ -213,6 +205,7 @@ export async function getVideo(rawVideoId, options = {}) {
   let videoId = rawVideoId;
   let continuationToken = options.token;
   let depth = options.depth ?? null;
+  const { token: _token, depth: _depth, ...requestOptions } = options;
 
   const checkParam = (key, val) => {
     if (key === "token") continuationToken = val;
@@ -261,7 +254,10 @@ export async function getVideo(rawVideoId, options = {}) {
   }
 
   if (continuationToken) {
-    const result = await fetchContinuationData(continuationToken);
+    const result = await fetchContinuationData(
+      continuationToken,
+      requestOptions
+    );
     const relatedVideosCompat =
       result?.items
         ?.map((item) => {
@@ -306,7 +302,7 @@ export async function getVideo(rawVideoId, options = {}) {
   const targetUrl = `${YOUTUBE_BASE_URL}${videoId}`;
   const response = await fetch(targetUrl, {
     method: "GET",
-    headers: REQUEST_HEADERS,
+    headers: createVideoRequestHeaders(requestOptions),
   });
 
   if (!response.ok) {
@@ -352,7 +348,8 @@ export async function getVideo(rawVideoId, options = {}) {
           );
           if (continuationItem && continuationItem.token) {
             const extraData = await fetchContinuationData(
-              continuationItem.token
+              continuationItem.token,
+              requestOptions
             );
             if (extraData && extraData.items.length > 0) {
               const resultsWithoutContinuation = parsedResults.filter(
@@ -544,25 +541,3 @@ export async function getVideo(rawVideoId, options = {}) {
     throw parseError;
   }
 }
-
-app.get("/api/video/:id", async (req, res) => {
-  try {
-    res.json(await getVideo(req.params.id, req.query));
-  } catch (error) {
-    res.status(error.statusCode || 500).json({
-      error:
-        error.statusCode === 400
-          ? error.message
-          : error.message === "Failed to parse internal data"
-            ? error.message
-            : "Internal Server Error",
-      ...(error.statusCode === 500 ? { detail: error.message } : {}),
-    });
-  }
-});
-
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok" });
-});
-
-export default app;

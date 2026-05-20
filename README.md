@@ -43,20 +43,37 @@ const playlist = await getPlaylist("PLxxxxxxxx");
 const suggestions = await getSuggestions("猫");
 ```
 
+設定を固定したクライアントを使う場合:
+
+```js
+import { SiaTubeClient } from "siatube-backend-v2";
+
+const client = new SiaTubeClient({
+  hl: "ja",
+  gl: "JP",
+  headerPath: "/absolute/path/to/header.txt",
+});
+
+const video = await client.getVideo("dQw4w9WgXcQ");
+const search = await client.searchVideos({ q: "猫" });
+```
+
 ## header.txt
 
-全サービス共通のヘッダーは `header.txt` から読み込みます。更新したい時はこのファイルだけ差し替えてください。
-
-デフォルトの読込先:
-
-```text
-./header.txt
-```
+全サービス共通のヘッダーは、必要なら `headerPath` または `SIATUBE_HEADER_PATH` で明示指定します。カレントディレクトリの `header.txt` は自動では読みません。
 
 別パスを使う場合:
 
 ```bash
 export SIATUBE_HEADER_PATH=/absolute/path/to/header.txt
+```
+
+または API ごとに直接渡せます。
+
+```js
+await getVideo("dQw4w9WgXcQ", {
+  headerPath: "/absolute/path/to/header.txt",
+});
 ```
 
 フォーマットは「1行目がキー、2行目が値」の繰り返しです。今の `header.txt` と同じ形式をそのまま使います。
@@ -105,14 +122,20 @@ npm run config:check
 - `getSuggestions(keyword)`
 - `SiaTubeClient`
 
-互換用途として Express app export も含まれています。
+`options` では次の共通設定を使えます。
 
-- `videoApp`
-- `searchApp`
-- `channelApp`
-- `commentApp`
-- `playlistApp`
-- `suggestApp`
+- `headerPath`
+- `headers`
+- `hl`
+- `gl`
+- `utcOffsetMinutes`
+
+Express app は別エントリです。
+
+```js
+import videoApp from "siatube-backend-v2/video/app";
+import searchApp from "siatube-backend-v2/search/app";
+```
 
 ## Validation
 

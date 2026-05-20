@@ -1,10 +1,10 @@
-import express from "express";
 import https from "https";
-import { createGoogleSuggestHeaders } from "../shared/youtube-request-config.js";
+import {
+  createGoogleSuggestHeaders,
+  getLocaleOptions,
+} from "../shared/youtube-request-config.js";
 
-const app = express();
-
-export function getSuggestions(keyword) {
+export function getSuggestions(keyword, requestOptions = {}) {
   return new Promise((resolve, reject) => {
     if (!keyword) {
       const error = new Error("keyword is required");
@@ -13,13 +13,16 @@ export function getSuggestions(keyword) {
       return;
     }
 
+    const locale = getLocaleOptions(requestOptions);
     const options = {
       hostname: "www.google.com",
-      path: `/complete/search?client=youtube&hl=ja&ds=yt&q=${encodeURIComponent(
+      path: `/complete/search?client=youtube&hl=${encodeURIComponent(
+        locale.hl
+      )}&ds=yt&q=${encodeURIComponent(
         keyword
       )}`,
       method: "GET",
-      headers: createGoogleSuggestHeaders(),
+      headers: createGoogleSuggestHeaders(requestOptions),
     };
 
     const request = https.request(options, (response) => {
@@ -39,32 +42,15 @@ export function getSuggestions(keyword) {
           const suggestionsArray = JSON.parse(jsonString);
           resolve(suggestionsArray[1].map((i) => i[0]));
         } catch (error) {
-          console.error("JSON parse error:", error);
           reject(error);
         }
       });
     });
 
     request.on("error", (error) => {
-      console.error("Request error:", error);
       reject(error);
     });
 
     request.end();
   });
 }
-
-app.get("/", async (req, res) => {
-  try {
-    res.json(await getSuggestions(req.query.keyword));
-  } catch (error) {
-    res.status(error.statusCode || 500).json({
-      error:
-        error.statusCode === 400
-          ? "keywordクエリが必要です"
-          : "外部リクエストでエラーが発生しました",
-    });
-  }
-});
-
-export default app;

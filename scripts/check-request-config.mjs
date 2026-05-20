@@ -1,26 +1,32 @@
-import { REQUEST_CLIENTS, REQUEST_CONFIG_META } from "../shared/youtube-request-config.js";
+import {
+  getRequestClients,
+  getRequestConfigMeta,
+} from "../shared/youtube-request-config.js";
+
+const requestClients = getRequestClients();
+const requestConfigMeta = getRequestConfigMeta();
 
 const summary = {
-  headerPath: REQUEST_CONFIG_META.headerPath,
-  hasHeaderFile: REQUEST_CONFIG_META.hasHeaderFile,
+  headerPath: requestConfigMeta.headerPath,
+  hasHeaderFile: requestConfigMeta.hasHeaderFile,
   comment: {
-    clientVersion: REQUEST_CLIENTS.comment.clientVersion,
-    hasVisitorData: Boolean(REQUEST_CLIENTS.comment.visitorData),
-    userAgent: REQUEST_CLIENTS.comment.userAgent,
+    clientVersion: requestClients.comment.clientVersion,
+    hasVisitorData: Boolean(requestClients.comment.visitorData),
+    userAgent: requestClients.comment.userAgent,
   },
   playlist: {
-    clientVersion: REQUEST_CLIENTS.playlist.clientVersion,
-    userAgent: REQUEST_CLIENTS.playlist.userAgent,
+    clientVersion: requestClients.playlist.clientVersion,
+    userAgent: requestClients.playlist.userAgent,
   },
   search: {
-    clientVersion: REQUEST_CLIENTS.search.clientVersion,
-    userAgent: REQUEST_CLIENTS.search.userAgent,
+    clientVersion: requestClients.search.clientVersion,
+    userAgent: requestClients.search.userAgent,
   },
   video: {
-    clientVersion: REQUEST_CLIENTS.video.clientVersion,
-    hasCookie: Boolean(REQUEST_CLIENTS.video.cookie),
-    userAgent: REQUEST_CLIENTS.video.userAgent,
-    headerKeys: Object.keys(REQUEST_CLIENTS.video.headers).sort(),
+    clientVersion: requestClients.video.clientVersion,
+    hasCookie: Boolean(requestClients.video.cookie),
+    userAgent: requestClients.video.userAgent,
+    headerKeys: Object.keys(requestClients.video.headers).sort(),
   },
 };
 

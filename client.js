@@ -10,35 +10,50 @@ import { getPlaylist } from "./playlist/index.js";
 import { getSuggestions } from "./suggest/index.js";
 
 export class SiaTubeClient {
+  constructor(defaultOptions = {}) {
+    this.defaultOptions = { ...defaultOptions };
+  }
+
+  mergeOptions(options) {
+    return {
+      ...this.defaultOptions,
+      ...options,
+      headers: {
+        ...(this.defaultOptions.headers || {}),
+        ...(options?.headers || {}),
+      },
+    };
+  }
+
   async getVideo(videoId, options) {
-    return getVideo(videoId, options);
+    return getVideo(videoId, this.mergeOptions(options));
   }
 
   async searchVideos(params) {
-    return searchVideos(params);
+    return searchVideos(this.mergeOptions(params));
   }
 
-  async getChannel(channelId) {
-    return getChannel(channelId);
+  async getChannel(channelId, options) {
+    return getChannel(channelId, this.mergeOptions(options));
   }
 
   async getComments(params) {
-    return getComments(params);
+    return getComments(this.mergeOptions(params));
   }
 
   async getReplies(params) {
-    return getReplies(params);
+    return getReplies(this.mergeOptions(params));
   }
 
   async getRawCommentData(params) {
-    return getRawCommentData(params);
+    return getRawCommentData(this.mergeOptions(params));
   }
 
   async getPlaylist(playlistId, options) {
-    return getPlaylist(playlistId, options);
+    return getPlaylist(playlistId, this.mergeOptions(options));
   }
 
-  async getSuggestions(keyword) {
-    return getSuggestions(keyword);
+  async getSuggestions(keyword, options) {
+    return getSuggestions(keyword, this.mergeOptions(options));
   }
 }

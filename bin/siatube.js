@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SERVICES = {
-  video: { entry: "../video/index.js", port: 3000 },
-  search: { entry: "../search/index.js", port: 3000 },
-  channel: { entry: "../channel/index.js", port: 3000 },
-  comment: { entry: "../comment/index.js", port: 3000 },
-  playlist: { entry: "../playlist/index.js", port: 3011 },
-  suggest: { entry: "../suggest/index.js", port: 3000 }
+  video: { entry: "../video/app.js", port: 3000 },
+  search: { entry: "../search/app.js", port: 3000 },
+  channel: { entry: "../channel/app.js", port: 3000 },
+  comment: { entry: "../comment/app.js", port: 3000 },
+  playlist: { entry: "../playlist/app.js", port: 3011 },
+  suggest: { entry: "../suggest/app.js", port: 3000 }
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,19 +63,10 @@ for (let i = 1; i < args.length; i += 1) {
   }
 }
 
-const child = spawn(process.execPath, [path.resolve(__dirname, service.entry)], {
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    PORT: String(port)
-  }
-});
+const entryUrl = pathToFileURL(path.resolve(__dirname, service.entry)).href;
+const module = await import(entryUrl);
+const app = module.default;
 
-child.on("exit", (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
-  }
-
-  process.exit(code ?? 0);
+app.listen(port, () => {
+  console.log(`${firstArg} service listening on port ${port}`);
 });
