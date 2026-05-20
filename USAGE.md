@@ -16,9 +16,9 @@ npm install siatube-backend-v2
 
 ## 使い方の全体像
 
-- 単発で呼ぶなら関数 import
-- 複数回呼ぶなら `SiaTubeClient`
-- 既存システム互換が必要なら `Express app`
+- 単発利用は関数 import
+- 複数回利用は `SiaTubeClient`
+- 既存システムには `Express app`
 
 ## 1. ルート import で関数を使う
 
@@ -32,6 +32,7 @@ import {
   getRawCommentData,
   getPlaylist,
   getSuggestions,
+  SiaTubeClient,
 } from "siatube-backend-v2";
 ```
 
@@ -47,6 +48,7 @@ const result = await getVideo("dQw4w9WgXcQ");
 
 - `token`: 関連動画の続き取得用 continuation token
 - `depth`: `"2"` を指定すると関連動画を追加読み込み
+- `headerPath`, `headers`, `hl`, `gl`, `utcOffsetMinutes`
 
 通常取得:
 
@@ -75,43 +77,36 @@ if (token) {
 const video = await getVideo("dQw4w9WgXcQ", { depth: "2" });
 ```
 
-### `searchVideos({ q?, token? })`
+### `searchVideos({ q?, token?, ...options })`
 
 YouTube 検索結果を取得します。
 
-初回検索:
-
 ```js
 const result = await searchVideos({ q: "猫" });
-console.log(result.items);
-console.log(result.continuationToken);
 ```
 
 次ページ取得:
 
 ```js
-const first = await searchVideos({ q: "猫" });
-
-if (first.continuationToken) {
-  const next = await searchVideos({ token: first.continuationToken });
+if (result.continuationToken) {
+  const next = await searchVideos({ token: result.continuationToken });
   console.log(next.items);
 }
 ```
 
-### `getChannel(channelId)`
+### `getChannel(channelId, options?)`
 
 チャンネル情報、トップ動画、プレイリスト一覧を取得します。
 
 ```js
 const channel = await getChannel("UC_x5XG1OV2P6uYZ5pxFChwA");
-
 console.log(channel.title);
 console.log(channel.topVideo);
 console.log(channel.playlists);
 console.log(channel.uploadsPlaylistId);
 ```
 
-### `getComments({ videoId, sort?, continuation? })`
+### `getComments({ videoId, sort?, continuation?, ...options })`
 
 動画の親コメントを取得します。
 
@@ -120,8 +115,6 @@ console.log(channel.uploadsPlaylistId);
 - `"top"`: 人気順
 - `"new"`: 新しい順
 
-人気順:
-
 ```js
 const comments = await getComments({
   videoId: "dQw4w9WgXcQ",
@@ -129,71 +122,32 @@ const comments = await getComments({
 });
 ```
 
-新しい順:
+続き取得:
 
 ```js
-const comments = await getComments({
-  videoId: "dQw4w9WgXcQ",
-  sort: "new",
-});
-```
-
-次ページ取得:
-
-```js
-const first = await getComments({
-  videoId: "dQw4w9WgXcQ",
-});
-
-if (first.nextContinuation) {
+if (comments.nextContinuation) {
   const next = await getComments({
     videoId: "dQw4w9WgXcQ",
-    continuation: first.nextContinuation,
+    continuation: comments.nextContinuation,
   });
   console.log(next.comments);
 }
 ```
 
-### `getReplies({ videoId, continuation })`
+### `getReplies({ videoId, continuation, ...options })`
 
-コメントへの返信を取得します。
-
-```js
-const comments = await getComments({
-  videoId: "dQw4w9WgXcQ",
-});
-
-const replyToken = comments.comments[0]?.replyContinuation;
-
-if (replyToken) {
-  const replies = await getReplies({
-    videoId: "dQw4w9WgXcQ",
-    continuation: replyToken,
-  });
-  console.log(replies.replies);
-}
-```
-
-返信の続き取得:
+コメントの返信を取得します。
 
 ```js
-const firstReplies = await getReplies({
+const replies = await getReplies({
   videoId: "dQw4w9WgXcQ",
   continuation: "REPLY_CONTINUATION_TOKEN",
 });
-
-if (firstReplies.nextContinuation) {
-  const nextReplies = await getReplies({
-    videoId: "dQw4w9WgXcQ",
-    continuation: firstReplies.nextContinuation,
-  });
-  console.log(nextReplies.replies);
-}
 ```
 
-### `getRawCommentData({ videoId, continuation })`
+### `getRawCommentData({ videoId, continuation, ...options })`
 
-コメント API の生 JSON を取得します。構造解析やデバッグ用です。
+コメント API の生 JSON を取得します。
 
 ```js
 const raw = await getRawCommentData({
@@ -206,14 +160,10 @@ const raw = await getRawCommentData({
 
 再生リストを取得します。
 
-通常プレイリスト:
-
 ```js
 const playlist = await getPlaylist("PLxxxxxxxx");
 console.log(playlist.items);
 ```
-
-continuation token 付き:
 
 ```js
 const playlist = await getPlaylist("PLxxxxxxxx", {
@@ -221,23 +171,17 @@ const playlist = await getPlaylist("PLxxxxxxxx", {
 });
 ```
 
-チャンネル ID を渡す:
-
 `UC...` を渡すと内部で `UU...` に変換されます。
 
 ```js
 const uploads = await getPlaylist("UC_x5XG1OV2P6uYZ5pxFChwA");
 ```
 
-複数プレイリスト結合:
-
-`====` で連結するとマージ結果を返します。
+複数プレイリストを結合するには `====` を使います。
 
 ```js
 const merged = await getPlaylist("PLaaaa====PLbbbb");
 ```
-
-RD ミックスプレイリスト:
 
 `RD...` 系は `v` が必須です。
 
@@ -245,6 +189,144 @@ RD ミックスプレイリスト:
 const mix = await getPlaylist("RDMM", {
   v: "dQw4w9WgXcQ",
 });
+```
+
+### `getSuggestions(keyword, options?)`
+
+Google / YouTube サジェストを取得します。
+
+```js
+const suggestions = await getSuggestions("猫");
+console.log(suggestions);
+```
+
+## 2. クラスで使う
+
+```js
+import { SiaTubeClient } from "siatube-backend-v2";
+
+const client = new SiaTubeClient({
+  hl: "ja",
+  gl: "JP",
+  headerPath: "/absolute/path/to/header.txt",
+});
+```
+
+各メソッドは関数 API と 1 対 1 です。
+
+```js
+const video = await client.getVideo("dQw4w9WgXcQ");
+const search = await client.searchVideos({ q: "猫" });
+const channel = await client.getChannel("UC_x5XG1OV2P6uYZ5pxFChwA");
+const comments = await client.getComments({ videoId: "dQw4w9WgXcQ" });
+const replies = await client.getReplies({
+  videoId: "dQw4w9WgXcQ",
+  continuation: "TOKEN",
+});
+const raw = await client.getRawCommentData({
+  videoId: "dQw4w9WgXcQ",
+  continuation: "TOKEN",
+});
+const playlist = await client.getPlaylist("PLxxxxxxxx");
+const suggestions = await client.getSuggestions("猫");
+```
+
+## 3. サブパス import で使う
+
+個別 import は tree-shakeや責務分離をしたい場合に向いています。
+
+```js
+import { getVideo } from "siatube-backend-v2/video";
+import { searchVideos } from "siatube-backend-v2/search";
+import { getChannel } from "siatube-backend-v2/channel";
+import { getComments, getReplies, getRawCommentData } from "siatube-backend-v2/comment";
+import { getPlaylist } from "siatube-backend-v2/playlist";
+import { getSuggestions } from "siatube-backend-v2/suggest";
+import { SiaTubeClient } from "siatube-backend-v2/client";
+```
+
+## 4. Express app として使う
+
+関数利用が基本ですが、必要なら既存の `Express app` も使えます。
+
+```js
+import express from "express";
+import {
+  videoApp,
+  searchApp,
+  channelApp,
+  commentApp,
+  playlistApp,
+  suggestApp,
+} from "siatube-backend-v2";
+
+const app = express();
+
+app.use("/video", videoApp);
+app.use("/search", searchApp);
+app.use("/channel", channelApp);
+app.use("/comment", commentApp);
+app.use("/playlist", playlistApp);
+app.use("/suggest", suggestApp);
+
+app.listen(3000);
+```
+
+## 5. header.txt の扱い
+
+`header.txt` は次の優先度で読み込まれます。
+
+1. `options.headerPath`
+2. 環境変数 `SIATUBE_HEADER_PATH`
+3. カレントディレクトリの `header.txt`
+
+`header.txt` のフォーマットはキーと値を交互に並べる形式です。
+
+```text
+user-agent
+Mozilla/5.0 ...
+sec-ch-ua
+"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+```
+
+`header.txt` に含めると扱いやすい値:
+
+- `user-agent`
+- `sec-ch-ua`
+- `sec-ch-ua-platform`
+- `x-youtube-client-version`
+- `x-goog-visitor-id`
+- `cookie`（必要な場合）
+
+## 6. エラーハンドリング
+
+バリデーションエラーや upstream エラーでは `Error` が throw されます。
+
+```js
+try {
+  const video = await getVideo("");
+} catch (error) {
+  console.error(error.message);
+  console.error(error.statusCode);
+}
+```
+
+よくあるエラー:
+
+- `getVideo("")`: `Missing video ID parameter`
+- `searchVideos({})`: `query parameter 'q' or 'token' is required`
+- `getChannel("")`: `channelId is required`
+- `getComments({})`: `videoId is required`
+- `getReplies({ videoId })`: `videoId and continuation are required`
+- `getRawCommentData({ videoId })`: `videoId and continuation are required`
+- `getPlaylist("RD...")` で `v` なし: `RD プレイリストには v パラメータが必要です`
+- `getSuggestions("")`: `keyword is required`
+
+## 7. 確認コマンド
+
+```bash
+npm run check
+npm run pack:check
 ```
 
 ### `getSuggestions(keyword)`

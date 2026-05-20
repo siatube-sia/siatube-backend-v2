@@ -31,19 +31,26 @@ import {
   searchVideos,
   getChannel,
   getComments,
+  getReplies,
+  getRawCommentData,
   getPlaylist,
   getSuggestions,
+  SiaTubeClient,
 } from "siatube-backend-v2";
 
 const video = await getVideo("dQw4w9WgXcQ");
 const search = await searchVideos({ q: "猫" });
 const channel = await getChannel("UC_x5XG1OV2P6uYZ5pxFChwA");
 const comments = await getComments({ videoId: "dQw4w9WgXcQ", sort: "top" });
+const replies = await getReplies({ videoId: "dQw4w9WgXcQ", continuation: "..." });
+const rawCommentData = await getRawCommentData({ videoId: "dQw4w9WgXcQ" });
 const playlist = await getPlaylist("PLxxxxxxxx");
 const suggestions = await getSuggestions("猫");
 ```
 
-設定を固定したクライアントを使う場合:
+## SiaTubeClient
+
+共通設定をまとめて使いたい場合は `SiaTubeClient` を使います。
 
 ```js
 import { SiaTubeClient } from "siatube-backend-v2";
@@ -58,17 +65,23 @@ const video = await client.getVideo("dQw4w9WgXcQ");
 const search = await client.searchVideos({ q: "猫" });
 ```
 
-## header.txt
+## header.txt の扱い
 
-全サービス共通のヘッダーは、必要なら `headerPath` または `SIATUBE_HEADER_PATH` で明示指定します。カレントディレクトリの `header.txt` は自動では読みません。
+`header.txt` は、次の優先順で読み込まれます。
 
-別パスを使う場合:
+1. `options.headerPath`
+2. 環境変数 `SIATUBE_HEADER_PATH`
+3. カレントディレクトリの `header.txt`
+
+そのため、プロジェクトルートに `header.txt` を置いておけば明示指定なしで自動的に読み込まれます。
+
+### 例: 環境変数で指定する場合
 
 ```bash
 export SIATUBE_HEADER_PATH=/absolute/path/to/header.txt
 ```
 
-または API ごとに直接渡せます。
+### 例: API 呼び出しごとに指定する場合
 
 ```js
 await getVideo("dQw4w9WgXcQ", {
@@ -76,7 +89,9 @@ await getVideo("dQw4w9WgXcQ", {
 });
 ```
 
-フォーマットは「1行目がキー、2行目が値」の繰り返しです。今の `header.txt` と同じ形式をそのまま使います。
+### `header.txt` のフォーマット
+
+`header.txt` はキーと値を交互に並べます。
 
 ```text
 user-agent
@@ -89,40 +104,32 @@ x-goog-visitor-id
 Cg...
 ```
 
-最低限、次の値が入っていると扱いやすいです。
+`header.txt` に書いたヘッダーは `createBaseHeaders()` で読み込まれ、`options.headers` より前にマージされます。
+
+リクエストごとに必要な `content-length`、`content-encoding`、`referer` などは API 側で上書きされます。
+
+### 推奨ヘッダー
 
 - `user-agent`
 - `sec-ch-ua`
 - `sec-ch-ua-platform`
 - `x-youtube-client-version`
 - `x-goog-visitor-id`
-- `cookie` が必要な場合は `cookie`
-
-リクエストごとに必要な `content-length`、`content-encoding`、動画単位の `referer` だけはコード側で上書きしますが、それ以外の共通ヘッダーはすべて `header.txt` ベースです。
-
-現在読み込まれている状態は次で確認できます。
-
-```bash
-npm run config:check
-```
-
-## Security
-
-`header.txt` に Cookie や visitor id を入れる場合、そのファイルを npm パッケージや git に含めない運用にしてください。
+- `cookie`（必要な場合）
 
 ## API Surface
 
 - `getVideo(videoId, options?)`
-- `searchVideos({ q?, token? })`
-- `getChannel(channelId)`
-- `getComments({ videoId, sort?, continuation? })`
-- `getReplies({ videoId, continuation })`
-- `getRawCommentData({ videoId, continuation })`
+- `searchVideos(params)`
+- `getChannel(channelId, options?)`
+- `getComments(params)`
+- `getReplies(params)`
+- `getRawCommentData(params)`
 - `getPlaylist(playlistId, options?)`
-- `getSuggestions(keyword)`
+- `getSuggestions(keyword, options?)`
 - `SiaTubeClient`
 
-`options` では次の共通設定を使えます。
+共通 `options`:
 
 - `headerPath`
 - `headers`
@@ -130,7 +137,9 @@ npm run config:check
 - `gl`
 - `utcOffsetMinutes`
 
-Express app は別エントリです。
+## Express App
+
+各機能は Express アプリとしてもエクスポートされています。
 
 ```js
 import videoApp from "siatube-backend-v2/video/app";
