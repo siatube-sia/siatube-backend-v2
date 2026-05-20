@@ -5,8 +5,6 @@ import {
 } from "../shared/youtube-request-config.js";
 
 const app = express();
-
-const PORT = 3000;
 const NODE_ENV = process.env.NODE_ENV || "development";
 
 /**
@@ -375,6 +373,4 @@ app.get("/search", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is listening on port ${PORT} [${NODE_ENV}]`);
-});
+export default app;

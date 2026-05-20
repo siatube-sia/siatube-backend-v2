@@ -8,7 +8,6 @@ import {
 } from "../shared/youtube-request-config.js";
 
 const app = express();
-const port = 3011;
 app.use(cors());
 
 // エンドポイント
@@ -480,6 +479,4 @@ app.get("/api/playlist/:id", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
+export default app;

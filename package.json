@@ -1,0 +1,48 @@
+{
+  "name": "siatube-backend-v2",
+  "version": "1.0.0",
+  "description": "Express app package for SiaTube backend API services.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./video": "./video/index.js",
+    "./search": "./search/index.js",
+    "./channel": "./channel/index.js",
+    "./comment": "./comment/index.js",
+    "./playlist": "./playlist/index.js",
+    "./suggest": "./suggest/index.js"
+  },
+  "files": [
+    "index.js",
+    "channel/index.js",
+    "comment/index.js",
+    "playlist/index.js",
+    "search/index.js",
+    "shared/youtube-request-config.js",
+    "suggest/index.js",
+    "video/index.js",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node --check ./index.js && node --check ./video/index.js && node --check ./search/index.js && node --check ./channel/index.js && node --check ./comment/index.js && node --check ./playlist/index.js && node --check ./suggest/index.js",
+    "pack:check": "npm pack --dry-run --cache /tmp/siatube-npm-cache"
+  },
+  "keywords": [
+    "youtube",
+    "api",
+    "express",
+    "backend"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "node-fetch": "^3.3.2",
+    "youtubei.js": "^15.1.0"
+  }
+}

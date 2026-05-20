@@ -3,7 +3,6 @@ import https from "https";
 import { createGoogleSuggestHeaders } from "../shared/youtube-request-config.js";
 
 const app = express();
-const PORT = 3000;
 
 app.get("/", (req, res) => {
   const keyword = req.query.keyword;
@@ -63,6 +62,4 @@ app.get("/", (req, res) => {
   request.end();
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+export default app;

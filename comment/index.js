@@ -8,7 +8,6 @@ import {
 } from "../shared/youtube-request-config.js";
 
 const app = express();
-const PORT = 3000;
 
 // YouTube Constants
 const CLIENT_VERSION = REQUEST_CLIENTS.comment.clientVersion;
@@ -353,8 +352,4 @@ app.get("/", (_, res) => {
   res.json({ ok: true, service: "youtube-comments-api" });
 });
 
-// --- Start Server ---
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+export default app;

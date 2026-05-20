@@ -1,15 +1,10 @@
-// app.js
 import express from "express";
 import { Innertube } from "youtubei.js";
 
 const app = express();
-const PORT = 3000;
 
 let youtube;
 
-// =========================
-// YouTube API 初期化
-// =========================
 (async () => {
   try {
     youtube = await Innertube.create({
@@ -24,16 +19,10 @@ let youtube;
   }
 })();
 
-// =========================
-// プレイリストID正規化
-// =========================
 function normalizePlaylistId(id = "") {
   return id.length > 34 ? id.slice(2) : id;
 }
 
-// =========================
-// サムネをBase64化
-// =========================
 async function fetchImageAsBase64(videoId, quality = "mqdefault") {
   if (!videoId) return "";
 
@@ -56,10 +45,6 @@ async function fetchImageAsBase64(videoId, quality = "mqdefault") {
   }
 }
 
-// =========================
-// API
-// GET /api/channel/:id
-// =========================
 app.get("/api/channel/:id", async (req, res) => {
   const channelId = req.params.id;
 
@@ -234,9 +219,4 @@ app.get("/api/channel/:id", async (req, res) => {
   }
 });
 
-// =========================
-// 起動
-// =========================
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+export default app;
