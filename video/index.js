@@ -205,15 +205,14 @@ const fetchContinuationData = async (token) => {
     return null;
   }
 };
-app.get("/api/video/:id", async (req, res) => {
-  let rawVideoId = req.params.id;
+export async function getVideo(rawVideoId, options = {}) {
   try {
     rawVideoId = decodeURIComponent(rawVideoId);
   } catch {}
 
   let videoId = rawVideoId;
-  let continuationToken = req.query.token;
-  let depth = null;
+  let continuationToken = options.token;
+  let depth = options.depth ?? null;
 
   const checkParam = (key, val) => {
     if (key === "token") continuationToken = val;
@@ -256,83 +255,84 @@ app.get("/api/video/:id", async (req, res) => {
   }
 
   if (!videoId) {
-    return res.status(400).json({ error: "Missing video ID parameter" });
+    const error = new Error("Missing video ID parameter");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (continuationToken) {
+    const result = await fetchContinuationData(continuationToken);
+    const relatedVideosCompat =
+      result?.items
+        ?.map((item) => {
+          if (item.type === "continuation") return null;
+
+          let rvId = item.videoId;
+          if (rvId && rvId.length !== 11 && rvId.startsWith("RD")) {
+            rvId = videoId;
+          }
+
+          return {
+            type: item.playlistId ? "playlist" : "video",
+            videoId: rvId,
+            title: item.title,
+            channelName: item.channel?.name || "",
+            viewCountText: item.stats?.views || "",
+            publishedTimeText: item.stats?.publishedTime || "",
+            duration: item.badge?.text || null,
+            badge: null,
+            thumbnails: item.thumbnails?.static || [],
+            thumbnail: item.thumbnails?.static?.[0]?.url || null,
+            channelAvatar: item.channel?.avatar || "",
+            playlistId: item.playlistId,
+          };
+        })
+        .filter(Boolean) || [];
+
+    const nextToken =
+      result?.items?.find((i) => i.type === "continuation")?.token || null;
+
+    return {
+      id: videoId,
+      title: "",
+      "Related-videos": {
+        relatedCount: relatedVideosCompat.length,
+        nextContinuationToken: nextToken,
+        relatedVideos: relatedVideosCompat,
+      },
+    };
+  }
+
+  const targetUrl = `${YOUTUBE_BASE_URL}${videoId}`;
+  const response = await fetch(targetUrl, {
+    method: "GET",
+    headers: REQUEST_HEADERS,
+  });
+
+  if (!response.ok) {
+    return {
+      id: videoId,
+      unavailable: true,
+      reason: `Service unavailable (Status ${response.status})`,
+      "Related-videos": { relatedVideos: [] },
+    };
+  }
+
+  const html = await response.text();
+  const regex = /var ytInitialData\s*=\s*({.*?});/s;
+  const match = html.match(regex);
+
+  if (!match || !match[1]) {
+    return {
+      id: videoId,
+      unavailable: true,
+      reason: "Failed to extract data",
+      "Related-videos": { relatedVideos: [] },
+    };
   }
 
   try {
-    if (continuationToken) {
-      const result = await fetchContinuationData(continuationToken);
-      const relatedVideosCompat =
-        result?.items
-          ?.map((item) => {
-            if (item.type === "continuation") return null;
-
-            let rvId = item.videoId;
-            if (rvId && rvId.length !== 11 && rvId.startsWith("RD")) {
-              rvId = videoId;
-            }
-
-            return {
-              type: item.playlistId ? "playlist" : "video",
-              videoId: rvId,
-              title: item.title,
-              channelName: item.channel?.name || "",
-              viewCountText: item.stats?.views || "",
-              publishedTimeText: item.stats?.publishedTime || "",
-              duration: item.badge?.text || null,
-              badge: null,
-              thumbnails: item.thumbnails?.static || [],
-              thumbnail: item.thumbnails?.static?.[0]?.url || null,
-              channelAvatar: item.channel?.avatar || "",
-              playlistId: item.playlistId,
-            };
-          })
-          .filter(Boolean) || [];
-
-      const nextToken =
-        result?.items?.find((i) => i.type === "continuation")?.token || null;
-
-      return res.json({
-        id: videoId,
-        title: "",
-        "Related-videos": {
-          relatedCount: relatedVideosCompat.length,
-          nextContinuationToken: nextToken,
-          relatedVideos: relatedVideosCompat,
-        },
-      });
-    }
-
-    const targetUrl = `${YOUTUBE_BASE_URL}${videoId}`;
-    const response = await fetch(targetUrl, {
-      method: "GET",
-      headers: REQUEST_HEADERS,
-    });
-
-    if (!response.ok) {
-      return res.json({
-        id: videoId,
-        unavailable: true,
-        reason: `Service unavailable (Status ${response.status})`,
-        "Related-videos": { relatedVideos: [] },
-      });
-    }
-
-    const html = await response.text();
-    const regex = /var ytInitialData\s*=\s*({.*?});/s;
-    const match = html.match(regex);
-
-    if (!match || !match[1]) {
-      return res.json({
-        id: videoId,
-        unavailable: true,
-        reason: "Failed to extract data",
-        "Related-videos": { relatedVideos: [] },
-      });
-    }
-
-    try {
-      const rawData = JSON.parse(match[1]);
+    const rawData = JSON.parse(match[1]);
       const twoColumnResults =
         rawData.contents?.twoColumnWatchNextResults?.results?.results;
       const secondarySection =
@@ -405,14 +405,14 @@ app.get("/api/video/:id", async (req, res) => {
         (c) => c.videoSecondaryInfoRenderer
       )?.videoSecondaryInfoRenderer;
 
-      if (!primaryInfoRenderer || !secondaryInfoRenderer) {
-        return res.json({
-          id: videoId,
-          unavailable: true,
-          reason: "Video details not found",
-          "Related-videos": { relatedVideos: [] },
-        });
-      }
+    if (!primaryInfoRenderer || !secondaryInfoRenderer) {
+      return {
+        id: videoId,
+        unavailable: true,
+        reason: "Video details not found",
+        "Related-videos": { relatedVideos: [] },
+      };
+    }
 
       const title = getTextFromRuns(primaryInfoRenderer?.title?.runs) || "";
       const shortViews =
@@ -504,49 +504,60 @@ app.get("/api/video/:id", async (req, res) => {
         displayAuthorSubscribers = "コラボレーター";
       }
 
-      res.json({
-        id: videoId,
-        title: title,
-        views: viewCountStr,
-        relativeDate: relativeDate,
-        likes: likeButtonTitle,
-        thumbnail: mainThumbnail,
-        author: {
-          id: channelId,
-          name: displayAuthorName,
-          subscribers: displayAuthorSubscribers,
-          thumbnail: displayAuthorThumbnail,
-          collaborator: isCollaborator,
-          collaborators: collaboratorsList,
-        },
-        description: descriptionObj,
-        "Related-videos": {
-          relatedCount: relatedVideos.length,
-          nextContinuationToken: nextContinuationToken,
-          relatedVideos: relatedVideos,
-        },
+    return {
+      id: videoId,
+      title: title,
+      views: viewCountStr,
+      relativeDate: relativeDate,
+      likes: likeButtonTitle,
+      thumbnail: mainThumbnail,
+      author: {
+        id: channelId,
+        name: displayAuthorName,
+        subscribers: displayAuthorSubscribers,
+        thumbnail: displayAuthorThumbnail,
+        collaborator: isCollaborator,
+        collaborators: collaboratorsList,
+      },
+      description: descriptionObj,
+      "Related-videos": {
+        relatedCount: relatedVideos.length,
+        nextContinuationToken: nextContinuationToken,
+        relatedVideos: relatedVideos,
+      },
 
-        extended_stats: {
-          views_original: originalViews,
-          views_short: shortViews,
-          date_simple: fullDate,
-          date_relative_label:
-            primaryInfoRenderer?.relativeDateText?.accessibility
-              ?.accessibilityData?.label || "",
-        },
-        extended_badges: ownerRenderer?.badges || [],
-        extended_superTitle:
-          getTextFromRuns(primaryInfoRenderer?.superTitleLink?.runs) || "",
-        trackingParams: twoColumnResults?.trackingParams || null,
-      });
-    } catch (parseError) {
-      res.status(500).json({
-        error: "Failed to parse internal data",
-        detail: parseError.message,
-      });
-    }
+      extended_stats: {
+        views_original: originalViews,
+        views_short: shortViews,
+        date_simple: fullDate,
+        date_relative_label:
+          primaryInfoRenderer?.relativeDateText?.accessibility
+            ?.accessibilityData?.label || "",
+      },
+      extended_badges: ownerRenderer?.badges || [],
+      extended_superTitle:
+        getTextFromRuns(primaryInfoRenderer?.superTitleLink?.runs) || "",
+      trackingParams: twoColumnResults?.trackingParams || null,
+    };
+  } catch (parseError) {
+    parseError.statusCode = 500;
+    throw parseError;
+  }
+}
+
+app.get("/api/video/:id", async (req, res) => {
+  try {
+    res.json(await getVideo(req.params.id, req.query));
   } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(error.statusCode || 500).json({
+      error:
+        error.statusCode === 400
+          ? error.message
+          : error.message === "Failed to parse internal data"
+            ? error.message
+            : "Internal Server Error",
+      ...(error.statusCode === 500 ? { detail: error.message } : {}),
+    });
   }
 });
 

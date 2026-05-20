@@ -1,11 +1,13 @@
 {
   "name": "siatube-backend-v2",
   "version": "1.0.0",
-  "description": "Express app package for SiaTube backend API services.",
+  "description": "Node.js library for fetching YouTube video, search, channel, comment, playlist, and suggestion data.",
   "type": "module",
   "main": "./index.js",
+  "sideEffects": false,
   "exports": {
     ".": "./index.js",
+    "./client": "./client.js",
     "./video": "./video/index.js",
     "./search": "./search/index.js",
     "./channel": "./channel/index.js",
@@ -14,7 +16,10 @@
     "./suggest": "./suggest/index.js"
   },
   "files": [
+    "client.js",
     "index.js",
+    "USAGE.md",
+    "scripts/check-request-config.mjs",
     "channel/index.js",
     "comment/index.js",
     "playlist/index.js",
@@ -26,16 +31,22 @@
     "README.md"
   ],
   "scripts": {
-    "check": "node --check ./index.js && node --check ./video/index.js && node --check ./search/index.js && node --check ./channel/index.js && node --check ./comment/index.js && node --check ./playlist/index.js && node --check ./suggest/index.js",
-    "pack:check": "npm pack --dry-run --cache /tmp/siatube-npm-cache"
+    "check": "node --check ./index.js && node --check ./client.js && node --check ./video/index.js && node --check ./search/index.js && node --check ./channel/index.js && node --check ./comment/index.js && node --check ./playlist/index.js && node --check ./suggest/index.js",
+    "pack:check": "npm pack --dry-run --cache /tmp/siatube-npm-cache",
+    "config:check": "node ./scripts/check-request-config.mjs"
   },
   "keywords": [
     "youtube",
     "api",
-    "express",
-    "backend"
+    "scraper",
+    "search",
+    "playlist",
+    "comments"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18"
   },

@@ -286,90 +286,99 @@ function extractYouTubeData(json) {
 // ==========================================
 // API エンドポイント
 // ==========================================
-app.get("/search", async (req, res) => {
-  try {
-    const q = req.query.q;
-    const token = req.query.token; 
+export async function searchVideos({
+  q,
+  token,
+} = {}) {
+  if (!q && !token) {
+    const error = new Error("query parameter 'q' or 'token' is required");
+    error.statusCode = 400;
+    throw error;
+  }
 
-    if (!q && !token) {
-      return res.status(400).json({
-        error: "Bad Request",
-        message: "query parameter 'q' or 'token' is required",
-      });
-    }
-
-    // 1. YouTube API Fetch
-    const url = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false";
-    const body = {
-      context: {
-        client: {
-          hl: "ja",
-          gl: "JP",
-          clientName: "WEB",
-          clientVersion: REQUEST_CLIENTS.search.clientVersion,
-          platform: "DESKTOP",
-          utcOffsetMinutes: 540,
-        },
-        user: { lockedSafetyMode: false },
-        request: { useSsl: true },
+  const url = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false";
+  const body = {
+    context: {
+      client: {
+        hl: "ja",
+        gl: "JP",
+        clientName: "WEB",
+        clientVersion: REQUEST_CLIENTS.search.clientVersion,
+        platform: "DESKTOP",
+        utcOffsetMinutes: 540,
       },
-    };
+      user: { lockedSafetyMode: false },
+      request: { useSsl: true },
+    },
+  };
 
-    if (token) {
-      body.continuation = token; // 2ページ目以降は単にトークンを渡すだけでOK
-    } else {
-      body.query = q;
-    }
+  if (token) {
+    body.continuation = token;
+  } else {
+    body.query = q;
+  }
 
-    const refererQuery = q ? encodeURIComponent(String(q)) : "";
-    const referer = `https://www.youtube.com/results?search_query=${refererQuery}`;
+  const refererQuery = q ? encodeURIComponent(String(q)) : "";
+  const referer = `https://www.youtube.com/results?search_query=${refererQuery}`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: createSearchHeaders(referer),
-      body: JSON.stringify(body),
-    });
+  const response = await fetch(url, {
+    method: "POST",
+    headers: createSearchHeaders(referer),
+    body: JSON.stringify(body),
+  });
 
-    if (!response.ok) {
-      console.error(`YouTube API responded with status: ${response.status}`);
-      return res.status(502).json({
-        error: "Bad Gateway",
-        message: "Failed to fetch data from upstream service.",
-      });
-    }
+  if (!response.ok) {
+    console.error(`YouTube API responded with status: ${response.status}`);
+    const error = new Error("Failed to fetch data from upstream service.");
+    error.statusCode = 502;
+    throw error;
+  }
 
-    const json = await response.json();
+  const json = await response.json();
+  const parsedData = extractYouTubeData(json);
 
-    // 2. JSON Parse + Extract (1ページ目も2ページ目以降も共通でパースする)
-    const parsedData = extractYouTubeData(json);
+  if (parsedData.items && parsedData.items.length > 0) {
+    for (const item of parsedData.items) {
+      if (Array.isArray(item.thumbnails) && item.thumbnails.length > 0) {
+        const lastThumbnail = item.thumbnails[item.thumbnails.length - 1];
 
-    // ③ サムネイル処理の最適化（Base64変換の廃止、URL整形のみ）
-    if (parsedData.items && parsedData.items.length > 0) {
-      for (const item of parsedData.items) {
-        if (Array.isArray(item.thumbnails) && item.thumbnails.length > 0) {
-          const lastThumbnail = item.thumbnails[item.thumbnails.length - 1];
-
-          if (lastThumbnail && lastThumbnail.url) {
-            let imgUrl = lastThumbnail.url;
-            if (imgUrl.startsWith("//")) {
-              imgUrl = "https:" + imgUrl;
-            }
-            item.thumbnails = [{ ...lastThumbnail, url: imgUrl }];
+        if (lastThumbnail && lastThumbnail.url) {
+          let imgUrl = lastThumbnail.url;
+          if (imgUrl.startsWith("//")) {
+            imgUrl = "https:" + imgUrl;
           }
+          item.thumbnails = [{ ...lastThumbnail, url: imgUrl }];
         }
       }
     }
+  }
 
-    return res.status(200).json(parsedData);
+  return parsedData;
+}
+
+app.get("/search", async (req, res) => {
+  try {
+    return res.status(200).json(await searchVideos(req.query));
   } catch (error) {
     console.error("Internal Server Error:", error);
 
-    const errorResponse = { error: "Internal Server Error" };
+    const errorResponse = {
+      error: error.statusCode === 400
+        ? "Bad Request"
+        : error.statusCode === 502
+          ? "Bad Gateway"
+          : "Internal Server Error",
+    };
+    if (error.statusCode) {
+      res.status(error.statusCode);
+    } else {
+      res.status(500);
+    }
     if (NODE_ENV === "development") {
       errorResponse.message = error.message;
     }
 
-    return res.status(500).json(errorResponse);
+    return res.json(errorResponse);
   }
 });
 

@@ -4,62 +4,67 @@ import { createGoogleSuggestHeaders } from "../shared/youtube-request-config.js"
 
 const app = express();
 
-app.get("/", (req, res) => {
-  const keyword = req.query.keyword;
+export function getSuggestions(keyword) {
+  return new Promise((resolve, reject) => {
+    if (!keyword) {
+      const error = new Error("keyword is required");
+      error.statusCode = 400;
+      reject(error);
+      return;
+    }
 
-  if (!keyword) {
-    return res.status(400).json({
-      error: "keywordクエリが必要です",
+    const options = {
+      hostname: "www.google.com",
+      path: `/complete/search?client=youtube&hl=ja&ds=yt&q=${encodeURIComponent(
+        keyword
+      )}`,
+      method: "GET",
+      headers: createGoogleSuggestHeaders(),
+    };
+
+    const request = https.request(options, (response) => {
+      let data = "";
+
+      response.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      response.on("end", () => {
+        try {
+          const jsonString = data.substring(
+            data.indexOf("["),
+            data.lastIndexOf("]") + 1
+          );
+
+          const suggestionsArray = JSON.parse(jsonString);
+          resolve(suggestionsArray[1].map((i) => i[0]));
+        } catch (error) {
+          console.error("JSON parse error:", error);
+          reject(error);
+        }
+      });
+    });
+
+    request.on("error", (error) => {
+      console.error("Request error:", error);
+      reject(error);
+    });
+
+    request.end();
+  });
+}
+
+app.get("/", async (req, res) => {
+  try {
+    res.json(await getSuggestions(req.query.keyword));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      error:
+        error.statusCode === 400
+          ? "keywordクエリが必要です"
+          : "外部リクエストでエラーが発生しました",
     });
   }
-
-  const options = {
-    hostname: "www.google.com",
-    path: `/complete/search?client=youtube&hl=ja&ds=yt&q=${encodeURIComponent(
-      keyword
-    )}`,
-    method: "GET",
-    headers: createGoogleSuggestHeaders(),
-  };
-
-  const request = https.request(options, (response) => {
-    let data = "";
-
-    response.on("data", (chunk) => {
-      data += chunk;
-    });
-
-    response.on("end", () => {
-      try {
-        const jsonString = data.substring(
-          data.indexOf("["),
-          data.lastIndexOf("]") + 1
-        );
-
-        const suggestionsArray = JSON.parse(jsonString);
-
-        const suggestions = suggestionsArray[1].map((i) => i[0]);
-
-        res.json(suggestions);
-      } catch (error) {
-        console.error("JSON parse error:", error);
-
-        res.status(500).json({
-          error: "JSONの解析に失敗しました",
-        });
-      }
-    });
-  });
-
-  request.on("error", (error) => {
-    console.error("Request error:", error);
-
-    res.status(500).json({
-      error: "外部リクエストでエラーが発生しました",
-    });
-  });
-
-  request.end();
 });
 
 export default app;

@@ -2,16 +2,11 @@ import express from "express";
 import zlib from "zlib";
 import https from "https";
 import {
-  REQUEST_CLIENTS,
   createCommentContext,
   createCommentHeaders,
 } from "../shared/youtube-request-config.js";
 
 const app = express();
-
-// YouTube Constants
-const CLIENT_VERSION = REQUEST_CLIENTS.comment.clientVersion;
-const VISITOR_ID = REQUEST_CLIENTS.comment.visitorData;
 
 // --- Helpers ---
 
@@ -276,75 +271,97 @@ async function fetchReplies(videoId, continuation) {
   };
 }
 
+export async function getComments({
+  videoId,
+  sort = "top",
+  continuation,
+} = {}) {
+  if (!videoId) {
+    const error = new Error("videoId is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = continuation
+    ? await fetchContinuation(videoId, continuation, { mode: "continuation" })
+    : await fetchInitialComments(videoId, sort);
+
+  return {
+    success: true,
+    mode: result.mode,
+    videoId,
+    ...(result.sort && { sort: result.sort }),
+    continuation: result.continuation,
+    nextContinuation: result.nextContinuation,
+    fetchedAt: new Date().toISOString(),
+    totalComments: result.comments.length,
+    comments: result.comments,
+  };
+}
+
+export async function getReplies({
+  videoId,
+  continuation,
+} = {}) {
+  if (!videoId || !continuation) {
+    const error = new Error("videoId and continuation are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await fetchReplies(videoId, continuation);
+
+  return {
+    success: true,
+    videoId,
+    continuation: result.continuation,
+    nextContinuation: result.nextContinuation,
+    fetchedAt: new Date().toISOString(),
+    totalReplies: result.comments.length,
+    replies: result.comments,
+  };
+}
+
+export async function getRawCommentData({
+  videoId,
+  continuation,
+} = {}) {
+  if (!videoId || !continuation) {
+    const error = new Error("videoId and continuation are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await fetchContinuation(videoId, continuation);
+  return result.raw;
+}
+
 // --- Endpoints ---
 
 app.get("/api/comments", async (req, res) => {
   try {
-    const { videoId, sort = "top", continuation } = req.query;
-    
-    if (!videoId) {
-      return res.status(400).json({ error: "videoId is required" });
-    }
-
-    const result = continuation
-      ? await fetchContinuation(videoId, continuation, { mode: "continuation" })
-      : await fetchInitialComments(videoId, sort);
-
-    res.json({
-      success: true,
-      mode: result.mode,
-      videoId,
-      ...(result.sort && { sort: result.sort }),
-      continuation: result.continuation,
-      nextContinuation: result.nextContinuation,
-      fetchedAt: new Date().toISOString(),
-      totalComments: result.comments.length,
-      comments: result.comments,
-    });
+    res.json(await getComments(req.query));
   } catch (err) {
     console.error("[Comments API Error]", err.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(err.statusCode || 500).json({ error: err.message || "Internal server error" });
   }
 });
 
 app.get("/api/replies", async (req, res) => {
   try {
-    const { videoId, continuation } = req.query;
-    
-    if (!videoId || !continuation) {
-      return res.status(400).json({ error: "videoId and continuation are required" });
-    }
-
-    const result = await fetchReplies(videoId, continuation);
-    
-    res.json({
-      success: true,
-      videoId,
-      continuation: result.continuation,
-      nextContinuation: result.nextContinuation,
-      fetchedAt: new Date().toISOString(),
-      totalReplies: result.comments.length,
-      replies: result.comments,
-    });
+    res.json(await getReplies(req.query));
   } catch (err) {
     console.error("[Replies API Error]", err.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(err.statusCode || 500).json({ error: err.message || "Internal server error" });
   }
 });
 
 app.get("/api/raw", async (req, res) => {
   try {
-    const { videoId, continuation } = req.query;
-    
-    if (!videoId || !continuation) {
-      return res.status(400).json({ error: "videoId and continuation are required" });
-    }
-
-    const result = await fetchContinuation(videoId, continuation);
-    res.json(result.raw);
+    res.json(await getRawCommentData(req.query));
   } catch (err) {
     console.error("[Raw API Error]", err.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(err.statusCode || 500).json({ error: err.message || "Internal server error" });
   }
 });
 

@@ -2,19 +2,13 @@ import express from "express";
 import fetch from "node-fetch";
 import https from "https"; 
 import cors from "cors";
-import {
-  REQUEST_CLIENTS,
-  createPlaylistHeaders,
-} from "../shared/youtube-request-config.js";
+import { createPlaylistHeaders } from "../shared/youtube-request-config.js";
 
 const app = express();
 app.use(cors());
 
 // エンドポイント
 const YT_API = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
-
-// Client Version (debug_rd.jsonから取得した最新版)
-const CLIENT_VERSION = REQUEST_CLIENTS.playlist.clientVersion;
 
 // メモリリーク対策: 通信エージェント
 const httpsAgent = new https.Agent({
@@ -371,111 +365,109 @@ async function handleNormalPlaylist(listId, token) {
 // ルート設定
 // ==================================================
 
-app.get("/api/playlist/:id", async (req, res) => {
-  let rawParams = req.params.id;
-  
-  let token = req.query.token || null;
-  let videoId = req.query.v || null;
+export async function getPlaylist(rawParams, options = {}) {
+  let token = options.token || null;
+  let videoId = options.v || null;
 
+  let decodedString = rawParams;
   try {
-    // パラメータ解析 (既存ロジック維持)
-    let decodedString = rawParams;
-    try {
-        const decoded = decodeURIComponent(rawParams);
-        if (decoded !== rawParams) decodedString = decoded;
-    } catch (e) {
-        decodedString = rawParams;
+    const decoded = decodeURIComponent(rawParams);
+    if (decoded !== rawParams) decodedString = decoded;
+  } catch (e) {
+    decodedString = rawParams;
+  }
+
+  let idString = decodedString;
+  let paramStrings = [];
+
+  if (decodedString.includes("==p==")) {
+    const parts = decodedString.split("==p==");
+    idString = parts[0];
+    paramStrings = parts.slice(1);
+  } else if (decodedString.includes("&")) {
+    const parts = decodedString.split("&");
+    idString = parts[0];
+    paramStrings = parts.slice(1);
+  }
+
+  paramStrings.forEach((str) => {
+    let key;
+    let val;
+    if (str.includes("==i==")) {
+      [key, val] = str.split("==i==");
+    } else if (str.includes("=")) {
+      [key, val] = str.split("=");
     }
 
-    let idString = decodedString;
-    let paramStrings = [];
-
-    if (decodedString.includes("==p==")) {
-        const parts = decodedString.split("==p==");
-        idString = parts[0];
-        paramStrings = parts.slice(1);
-    } else if (decodedString.includes("&")) {
-        const parts = decodedString.split("&");
-        idString = parts[0];
-        paramStrings = parts.slice(1);
+    if (key && val) {
+      if (key === "token") token = val;
+      if (key === "v") videoId = val;
     }
+  });
 
-    paramStrings.forEach(str => {
-        let key, val;
-        if (str.includes("==i==")) {
-            [key, val] = str.split("==i==");
-        } else if (str.includes("=")) {
-            [key, val] = str.split("=");
-        }
+  const idList = idString.split("====");
 
-        if (key && val) {
-            if (key === 'token') token = val;
-            if (key === 'v') videoId = val;
-        }
-    });
-
-    const idList = idString.split("====");
-
-    // IDの変換処理
-    const targetIds = idList.map((id) => {
-      id = id.trim();
-      if (id.startsWith("UC")) {
-        return "UU" + id.slice(2);
-      }
-      return id;
-    });
-
-    // RD (ミックス) リストの場合
-    if (targetIds[0].startsWith("RD")) {
-      if (!videoId)
-        throw new Error("RD プレイリストには v パラメータが必要です");
-      const json = await handleRDPlaylist(targetIds[0], videoId);
-      return res.json(json);
+  const targetIds = idList.map((id) => {
+    id = id.trim();
+    if (id.startsWith("UC")) {
+      return "UU" + id.slice(2);
     }
+    return id;
+  });
 
-    // 通常プレイリストの場合 (並列取得)
-    const results = await Promise.all(
-      targetIds.map((listId) => handleNormalPlaylist(listId, token))
-    );
+  if (targetIds[0].startsWith("RD")) {
+    if (!videoId) {
+      const error = new Error("RD プレイリストには v パラメータが必要です");
+      error.statusCode = 400;
+      throw error;
+    }
+    return handleRDPlaylist(targetIds[0], videoId);
+  }
 
-    // 複数ID指定時のマージ処理
-    let allItems = results.flatMap((res) => res.items);
+  const results = await Promise.all(
+    targetIds.map((listId) => handleNormalPlaylist(listId, token))
+  );
 
-    const itemsWithSortKey = allItems.map((item) => {
-      const secondsAgo = parsePublishedToSeconds(item.published, item.duration);
-      return {
-        ...item,
-        _sortSeconds: secondsAgo,
-      };
-    });
+  let allItems = results.flatMap((res) => res.items);
 
-    itemsWithSortKey.sort((a, b) => a._sortSeconds - b._sortSeconds);
-
-    const finalItems = itemsWithSortKey.map((item) => {
-      const { _sortSeconds, ...originalItem } = item;
-      return originalItem;
-    });
-
-    const mergedTitle = targetIds.length > 1 ? "" : (results[0]?.title || "");
-
-    const mergedResponse = {
-      playlistId: targetIds.join(","),
-      title: mergedTitle,
-      author: "Multiple Channels",
-      description: "Merged Playlist",
-      responseItems: `${finalItems.length}`,
-      totalItems: `${finalItems.length} 本`,
-      url: "",
-      lastUpdated: new Date().toISOString(),
-      views: null,
-      items: finalItems,
-      nextToken: null,
+  const itemsWithSortKey = allItems.map((item) => {
+    const secondsAgo = parsePublishedToSeconds(item.published, item.duration);
+    return {
+      ...item,
+      _sortSeconds: secondsAgo,
     };
+  });
 
-    return res.json(mergedResponse);
+  itemsWithSortKey.sort((a, b) => a._sortSeconds - b._sortSeconds);
+
+  const finalItems = itemsWithSortKey.map((item) => {
+    const { _sortSeconds, ...originalItem } = item;
+    return originalItem;
+  });
+
+  const mergedTitle = targetIds.length > 1 ? "" : results[0]?.title || "";
+
+  return {
+    playlistId: targetIds.join(","),
+    title: mergedTitle,
+    author: "Multiple Channels",
+    description: "Merged Playlist",
+    responseItems: `${finalItems.length}`,
+    totalItems: `${finalItems.length} 本`,
+    url: "",
+    lastUpdated: new Date().toISOString(),
+    views: null,
+    items: finalItems,
+    nextToken: null,
+  };
+}
+
+app.get("/api/playlist/:id", async (req, res) => {
+  try {
+    return res.json(await getPlaylist(req.params.id, req.query));
   } catch (err) {
     console.error("[/playlist] Error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 

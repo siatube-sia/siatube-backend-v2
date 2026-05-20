@@ -1,0 +1,42 @@
+content-type
+application/x-www-form-urlencoded
+device-memory
+8
+referer
+https://www.youtube.com/
+sec-ch-dpr
+1
+sec-ch-ua
+"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+sec-ch-ua-arch
+"x86"
+sec-ch-ua-bitness
+"64"
+sec-ch-ua-form-factors
+"Desktop"
+sec-ch-ua-full-version
+"147.0.0.0"
+sec-ch-ua-full-version-list
+"Google Chrome";v="147.0.0.0", "Not.A/Brand";v="8.0.0.0", "Chromium";v="147.0.0.0"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-model
+""
+sec-ch-ua-platform
+"Chrome OS"
+sec-ch-ua-platform-version
+"14541.0.0"
+sec-ch-ua-wow64
+?0
+sec-ch-viewport-width
+425
+user-agent
+Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36
+x-goog-visitor-id
+Cg...
+x-youtube-client-name
+1
+x-youtube-client-version
+2.20260519.01.00
+cookie
+SID=...; HSID=...
